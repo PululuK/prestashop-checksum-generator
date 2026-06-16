@@ -1,0 +1,91 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+use App\Service\DirectoryTreeBuilder;
+use App\Service\XmlChecksumGenerator;
+
+exit((static function (): int {
+    require __DIR__ . '/../vendor/autoload.php';
+
+    $usage = <<<TXT
+        PrestaShop checksum generator
+
+        Usage:
+          generate-checksum --path=<dir> --version=<version> [options]
+
+        Required:
+          --path=<dir>        Root directory of the PrestaShop installation to scan.
+          --version=<ver>     PrestaShop version written in the <ps_root_dir> tag.
+
+        Options:
+          --output=<file>     Write the XML to <file> instead of standard output.
+          --exclude=<name>    Directory name to skip. Repeatable. When provided at
+                              least once, it fully replaces the default exclude list
+                              (.git, .idea, var, vendor).
+          -h, --help          Show this help and exit.
+
+        Examples:
+          generate-checksum --path=/var/www/prestashop --version=8.1.0 > checksum.xml
+          generate-checksum --path=. --version=8.1.0 --output=checksum.xml
+          generate-checksum --path=. --version=8.1.0 --exclude=.git --exclude=cache
+
+        TXT;
+
+    $options = getopt('h', ['path:', 'version:', 'output:', 'exclude:', 'help']);
+
+    if (isset($options['h']) || isset($options['help'])) {
+        fwrite(STDOUT, $usage);
+
+        return 0;
+    }
+
+    $path = $options['path'] ?? null;
+    $version = $options['version'] ?? null;
+
+    if (!is_string($path) || $path === '' || !is_string($version) || $version === '') {
+        fwrite(STDERR, "Error: both --path and --version are required.\n\n");
+        fwrite(STDERR, $usage);
+
+        return 2;
+    }
+
+    $excluded = null;
+    if (isset($options['exclude'])) {
+        $rawExcludes = is_array($options['exclude']) ? $options['exclude'] : [$options['exclude']];
+
+        $excluded = [];
+        foreach ($rawExcludes as $name) {
+            if (is_string($name) && $name !== '') {
+                $excluded[] = $name;
+            }
+        }
+    }
+
+    try {
+        $generator = new XmlChecksumGenerator(new DirectoryTreeBuilder($excluded));
+        $xml = $generator->generate($path, $version);
+    } catch (\Throwable $exception) {
+        fwrite(STDERR, sprintf("Error: %s\n", $exception->getMessage()));
+
+        return 1;
+    }
+
+    $output = $options['output'] ?? null;
+    if (is_string($output) && $output !== '') {
+        if (file_put_contents($output, $xml) === false) {
+            fwrite(STDERR, sprintf("Error: unable to write to \"%s\".\n", $output));
+
+            return 1;
+        }
+
+        fwrite(STDERR, sprintf("Checksum written to %s\n", $output));
+
+        return 0;
+    }
+
+    fwrite(STDOUT, $xml);
+
+    return 0;
+})());
