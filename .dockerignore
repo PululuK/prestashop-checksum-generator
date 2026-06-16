@@ -1,0 +1,14 @@
+# Keep the build context small and reproducible.
+.git
+.github
+.gitlab-ci.yml
+.idea
+*.md
+LICENSE
+
+# Regenerated inside the build stage — never ship host artifacts.
+app/vendor
+app/tests
+app/phpunit.xml.dist
+app/phpunit.xml
+app/.phpunit.cache
